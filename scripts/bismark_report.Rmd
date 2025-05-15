@@ -1,0 +1,222 @@
+---
+title: "Stellar sea lion epigentic clock"
+output: html_notebook
+authour: "charles gumbi"
+date: "2025-05-14"
+---
+
+### Load required packages
+
+```{r libraries}
+library(tidyverse)
+```
+
+### Function to read and parse bismark report
+
+```{r funtions}
+read_bismark_report <- function(file_path) {
+  # Read the file
+  tryCatch({
+    lines <- readLines(file_path)
+    
+    # Extract sample name from file path
+    sample_name <- basename(file_path) %>%
+      gsub("PE_report.txt$|PE_report.txt$|PE_report.txt$|PE_report.txt$", "", .)
+    
+    # Function to safely extract numeric values
+    extract_value <- function(pattern, lines) {
+      line <- grep(pattern, lines, value = TRUE)
+      if (length(line) > 0) {
+        # Extract number and remove any % signs
+        val <- gsub("^.*?: ", "", line[1]) %>%
+          gsub("%", "", .) %>%
+          gsub(" .*$", "", .) %>%
+          as.numeric()
+        return(ifelse(is.na(val), 0, val))
+      }
+      return(0)
+    }
+    
+    # Extract metrics with more flexible pattern matching
+    total_reads <- extract_value("Sequence pairs analysed in total:", lines)
+    if (total_reads == 0) {
+      total_reads <- extract_value("Total number of reads processed:", lines)
+    }
+    
+    mapping_efficiency <- extract_value("Mapping efficiency:", lines)
+    if (mapping_efficiency == 0) {
+      mapping_efficiency <- extract_value("Mapping efficiency*:", lines)
+    }
+    
+    methylated_CpG <- extract_value("Total methylated C's in CpG context:", lines)
+    if (methylated_CpG == 0) {
+      methylated_CpG <- extract_value("% methylation.*CpG.*:", lines)
+    }
+    
+    methylated_CHG <- extract_value("C methylated in CHG context:", lines)
+    if (methylated_CHG == 0) {
+      methylated_CHG <- extract_value("% methylation.*CHG.*:", lines)
+    }
+    
+    methylated_CHH <- extract_value("C methylated in CHH context:", lines)
+    if (methylated_CHH == 0) {
+      methylated_CHH <- extract_value("% methylation.*CHH.*:", lines)
+    }
+    
+    # Create data frame with checks for missing values
+    data.frame(
+      Sample = sample_name,
+      Total_Reads = total_reads,
+      Mapping_Efficiency = mapping_efficiency,
+      CpG_Methylation = methylated_CpG,
+      CHG_Methylation = methylated_CHG,
+      CHH_Methylation = methylated_CHH,
+      stringsAsFactors = FALSE
+    )
+  }, error = function(e) {
+    warning(sprintf("Error processing file %s: %s", file_path, e$message))
+    # Return empty data frame with correct structure
+    data.frame(
+      Sample = character(),
+      Total_Reads = numeric(),
+      Mapping_Efficiency = numeric(),
+      CpG_Methylation = numeric(),
+      CHG_Methylation = numeric(),
+      CHH_Methylation = numeric(),
+      stringsAsFactors = FALSE
+    )
+  })
+}
+```
+# Process multiple files
+```{r}
+# List all report files
+report_files <- list.files(path = "~/methylation/sea_lion/bismark_output/alignment", 
+                           pattern = ".*report\\.txt$", 
+                           full.names = TRUE)
+```
+
+###  Print the files found to help with debugging
+
+```{r print}
+# Print the files found to help with debugging
+cat("Found the following report files:\n")
+print(report_files)
+```
+
+### Combine all reports 
+
+```{r combine_all_reports}
+# Read and combine all reports with error handling
+bismark_summary <- map_df(report_files, function(file) {
+  result <- read_bismark_report(file)
+  if (nrow(result) == 0) {
+    warning(sprintf("No data extracted from %s", file))
+  }
+  return(result)
+})
+```
+
+### Check data
+
+```{r check_data}
+# Check if we got any data
+if (nrow(bismark_summary) == 0) {
+  stop("No data was successfully extracted from any report files")
+}
+```
+### Veiw summary 
+
+```{r summary}
+print(bismark_summary)
+```
+
+#### Create summary statistics
+
+```{r summary_stats}
+summary_stats <- bismark_summary %>%
+  summarise(
+    Number_of_Samples = n(),
+    Mean_Mapping_Efficiency = mean(Mapping_Efficiency, na.rm = TRUE),
+    SD_Mapping_Efficiency = sd(Mapping_Efficiency, na.rm = TRUE),
+    Mean_CpG_Methylation = mean(CpG_Methylation, na.rm = TRUE),
+    SD_CpG_Methylation = sd(CpG_Methylation, na.rm = TRUE),
+    Mean_Total_Reads = mean(Total_Reads, na.rm = TRUE),
+    SD_Total_Reads = sd(Total_Reads, na.rm = TRUE)
+  )
+
+# Print summary statistics
+print(summary_stats)
+```
+### Create visualizations 
+
+```{r  visualize }
+
+# Create visualizations if there's data
+if (nrow(bismark_summary) > 0) {
+  # Mapping efficiency plot
+  mapping_plot <- ggplot(bismark_summary, aes(x = Sample, y = Mapping_Efficiency)) +
+    geom_bar(stat = "identity") +
+    theme_minimal() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+    labs(title = "Mapping Efficiency Across Samples",
+         y = "Mapping Efficiency (%)")
+  
+  print(mapping_plot)
+  
+  # Methylation context plot
+  methylation_long <- bismark_summary %>%
+    pivot_longer(cols = c(CpG_Methylation, CHG_Methylation, CHH_Methylation),
+                 names_to = "Context",
+                 values_to = "Methylation")
+  
+  methylation_plot <- ggplot(methylation_long, aes(x = Sample, y = Methylation, fill = Context)) +
+    geom_bar(stat = "identity", position = "dodge") +
+    theme_minimal() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+    labs(title = "Methylation Levels by Context",
+         y = "Methylation (%)")
+  
+  print(methylation_plot)
+}
+```
+
+### Save methylation results
+
+```{r}
+# Save results
+write.csv(bismark_summary, "bismark_summary.csv", row.names = FALSE)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
