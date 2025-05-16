@@ -112,10 +112,10 @@ methylation_plot <- ggplot(methylation_long, aes(x = Sample, y = Methylation, fi
   geom_bar(stat = "identity", position = "dodge") +
   scale_fill_paletteer_d("nationalparkcolors::Acadia") +
   theme_minimal() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  theme(axis.text.x = element_blank()) +
     labs(title = "Methylation Levels by Context", y = "Methylation (%)")
 
-ggsave(plot = methylation_plot, filename = "~/methylation/sealion_clock/output_plot/methylation_plot.png" , width = 6, height = 4, dpi = 300)
+ggsave(plot = methylation_plot, filename = "~/methylation/sealion_clock/output_plot/methylation_plot.png", dpi = 300)
 
 
 
