@@ -1,26 +1,37 @@
 ---
-title: "Sea lion single locus metylation report "
+title: "Sealion single locus metylation report "
 output: html_notebook
 author: "charles-gumbi)"
 date: "2025-05-19"
 ---
 
 ### Loading necessary libraries
-```{r}
+```{r libraries}
 library(dplyr)
 library(stringr)
 library(paletteer)
 library(ggplot2)
+library(tidyverse)
+library(RcppParallel)
+library(tidyr)
+library(multidplyr)
+library(emmeans)
+library(rstanarm)
+library(coda)
+library(igraph)
+
+#install.packages("igraph", dependencies = TRUE)
+#install.packages("rstanarm", dependencies = TRUE)
 ```
 
 ### Defining the directory containing Bismark reports
-```{r}
-report_dir <- "~/methylation/sea_lion/bismark_output/alignment"
+```{r directiories}
+report_dir <- "~/methylation/sea_lion/bismark_output/locus001/alignment/"
 report_files <- list.files(report_dir, pattern = "_bismark_bt2_PE_report.txt$", full.names = TRUE)
 ```
 
 ### Fuction to extract the relevent infomation from ech individual file 
-```{r}
+```{r fuctions}
 # Initialize an empty list to store extracted data
 report_list <- list()
 
@@ -75,7 +86,6 @@ for (file in report_files) {
     CmethylatedInCHGcontext=CmethylatedInCHGcontext,
     CmethylatedInCHHcontext=CmethylatedInCHHcontext)
 }
-
 # Combine all extracted data into a single dataframe
 final_dataframe <- bind_rows(report_list)
 
@@ -84,7 +94,7 @@ write.csv(final_dataframe, "~/methylation/sealion_clock/output_csv/combined_bism
 ```
 
 ### Creating summary statistics
-```{r}
+```{r summmary}
 
 summary_stats <- final_dataframe %>%
   summarise(
@@ -144,5 +154,64 @@ methylation_plot
 
 ggsave(plot = methylation_plot, filename = "~/methylation/sealion_clock/output_plot/methylation_plot.png", width = 8, height = 6, dpi = 300)
 ```
+
+### Load the matrix of percent methylation values
+
+```{r adding_metadata}
+metadata <- read.csv("~/methylation/sealion_clock/output_csv/Ejubatus_ABLG_export_20250506.csv", header = T)
+# Remove "_L001_R1_trimmed" from sample names
+
+sealion_df <- final_dataframe %>%
+  mutate(Sample = gsub("_L001_R1_trimmed", "", Sample)) %>%
+   select(Sample, CmethylatedInCpGcontext) %>%
+  separate(Sample, into = c("ABLG", "PlateNumber"), sep = "_") %>%
+  mutate(loci001 = CmethylatedInCpGcontext / 100)
+
+sealion_df <- merge(sealion_df, metadata, by = "ABLG") %>%
+  select(ABLG, loci001, AgeYRS)
+```
+
+### Calculate Pearson's correlations
+
+```{r pearson_corr}
+corr_matrix <- corr.test(x = as.matrix(sealion_df[,-2]), 
+                         y = sealion_df[,2], use="pairwise",
+                         method="pearson", adjust="BH", alpha=0.05)
+
+#Format dataframe
+
+corr_results <- data.frame(corr_matrix$r, corr_matrix$p.adj)
+corr_results <- tibble::rownames_to_column(corr_results, "Loc")
+colnames(corr_results) <- c("Loc", "r", "padj")
+corr_results$absr <- abs(corr_results$r)
+
+#Extract CpG sites with top 10% of Pearson's correlations
+
+quantile(corr_results$absr, 0.90)
+
+loc_highr <- corr_results %>%
+  filter(absr > 0.4465467)
+
+BBRF_percent_wide_filt <- BBRF_percent_wide %>%
+  select(loc_highr$Loc, Age)
+
+#Run cv.glmnet
+
+CVGLM <- cv.glmnet(x = as.matrix(BBRF_percent_wide_filt[,-1015]),
+                   y = BBRF_percent_wide_filt[,1015],
+                   nfolds = nrow(BBRF_percent_wide_filt),
+                   alpha = 0,
+                   type.measure = "mae",
+                   family = "gaussian",
+                   grouped=FALSE)
+
+min(CVGLM$cvm)
+
+
+
+
+```
+
+
 
 
