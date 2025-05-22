@@ -1,11 +1,14 @@
 ---
-title: "Sealion single locus metylation report "
-output: html_notebook
+title: 'Sealion single locus metylation report '
 author: "charles-gumbi)"
 date: "2025-05-19"
+output:
+  pdf_document: default
+  html_notebook: default
 ---
 
 ### Loading necessary libraries
+
 ```{r libraries}
 library(dplyr)
 library(stringr)
@@ -16,21 +19,24 @@ library(RcppParallel)
 library(tidyr)
 library(multidplyr)
 library(emmeans)
-library(rstanarm)
+#library(rstanarm)
 library(coda)
-library(igraph)
+#library(igraph)
 
+#BiocManager::install("rstanarm", dependencies=T, force = T)
 #install.packages("igraph", dependencies = TRUE)
 #install.packages("rstanarm", dependencies = TRUE)
 ```
 
 ### Defining the directory containing Bismark reports
+
 ```{r directiories}
-report_dir <- "~/methylation/sea_lion/bismark_output/locus001/alignment/"
+report_dir <- "~/methylation/sea_lion/bismark_output/combined_loci"
 report_files <- list.files(report_dir, pattern = "_bismark_bt2_PE_report.txt$", full.names = TRUE)
 ```
 
-### Fuction to extract the relevent infomation from ech individual file 
+### Function to extract the relevent infomation from ech individual file
+
 ```{r fuctions}
 # Initialize an empty list to store extracted data
 report_list <- list()
@@ -94,6 +100,7 @@ write.csv(final_dataframe, "~/methylation/sealion_clock/output_csv/combined_bism
 ```
 
 ### Creating summary statistics
+
 ```{r summmary}
 
 summary_stats <- final_dataframe %>%
@@ -109,9 +116,8 @@ summary_stats <- final_dataframe %>%
 print(summary_stats)
 ```
 
-
-
 ### Mapping efficiency plot
+
 ```{r mapping_plot}
 mapping_plot <- ggplot(final_dataframe, aes(x = Sample, y = MappingEfficiency)) +
   geom_bar(stat = "identity") +
@@ -130,7 +136,8 @@ mapping_plot
 ggsave(plot = mapping_plot, filename = "~/methylation/sealion_clock/output_plot/mapping_plot.png" , width = 8, height = 6, dpi = 300)
 ```
 
-###  Visualizing methylation levels in three context (i.e. CpG, CHH, CHG) across samples. 
+### Visualizing methylation levels in three context (i.e. CpG, CHH, CHG) across samples.
+
 ```{r meltylation_level_plot}
 methylation_long <- final_dataframe %>%
     pivot_longer(cols = c(CmethylatedInCHHcontext, CmethylatedInCHGcontext, CmethylatedInCpGcontext),
@@ -211,7 +218,3 @@ min(CVGLM$cvm)
 
 
 ```
-
-
-
-
