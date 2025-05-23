@@ -35,7 +35,7 @@ report_dir <- "~/methylation/sea_lion/bismark_output/combined_loci"
 report_files <- list.files(report_dir, pattern = "_bismark_bt2_PE_report.txt$", full.names = TRUE)
 ```
 
-### Function to extract the relevent infomation from ech individual file
+### Function to extract the relevant information from each individual file
 
 ```{r fuctions}
 # Initialize an empty list to store extracted data
@@ -162,7 +162,7 @@ methylation_plot
 ggsave(plot = methylation_plot, filename = "~/methylation/sealion_clock/output_plot/methylation_plot.png", width = 8, height = 6, dpi = 300)
 ```
 
-### Load the matrix of percent methylation values
+### Load the matrix of percent methylation scores
 
 ```{r adding_metadata}
 metadata <- read.csv("~/methylation/sealion_clock/output_csv/Ejubatus_ABLG_export_20250506.csv", header = T)
@@ -170,51 +170,19 @@ metadata <- read.csv("~/methylation/sealion_clock/output_csv/Ejubatus_ABLG_expor
 
 sealion_df <- final_dataframe %>%
   mutate(Sample = gsub("_L001_R1_trimmed", "", Sample)) %>%
-   select(Sample, CmethylatedInCpGcontext) %>%
-  separate(Sample, into = c("ABLG", "PlateNumber"), sep = "_") %>%
-  mutate(loci001 = CmethylatedInCpGcontext / 100)
+  separate(Sample, into = c("ABLG", "Locus", "PlateNumber"), sep = "[-_]") %>%  # Split the 'Sample' column into three new columns
+  select(ABLG, CmethylatedInCpGcontext, Locus) %>%
+  mutate(methylationlevel = CmethylatedInCpGcontext / 100)
 
-sealion_df <- merge(sealion_df, metadata, by = "ABLG") %>%
-  select(ABLG, loci001, AgeYRS)
-```
-
-### Calculate Pearson's correlations
-
-```{r pearson_corr}
-corr_matrix <- corr.test(x = as.matrix(sealion_df[,-2]), 
-                         y = sealion_df[,2], use="pairwise",
-                         method="pearson", adjust="BH", alpha=0.05)
-
-#Format dataframe
-
-corr_results <- data.frame(corr_matrix$r, corr_matrix$p.adj)
-corr_results <- tibble::rownames_to_column(corr_results, "Loc")
-colnames(corr_results) <- c("Loc", "r", "padj")
-corr_results$absr <- abs(corr_results$r)
-
-#Extract CpG sites with top 10% of Pearson's correlations
-
-quantile(corr_results$absr, 0.90)
-
-loc_highr <- corr_results %>%
-  filter(absr > 0.4465467)
-
-BBRF_percent_wide_filt <- BBRF_percent_wide %>%
-  select(loc_highr$Loc, Age)
-
-#Run cv.glmnet
-
-CVGLM <- cv.glmnet(x = as.matrix(BBRF_percent_wide_filt[,-1015]),
-                   y = BBRF_percent_wide_filt[,1015],
-                   nfolds = nrow(BBRF_percent_wide_filt),
-                   alpha = 0,
-                   type.measure = "mae",
-                   family = "gaussian",
-                   grouped=FALSE)
-
-min(CVGLM$cvm)
+methylation_level <- merge(sealion_df, metadata, by = "ABLG") %>%
+  select(ABLG, Locus, methylationlevel,AgeYRS )
 
 
+# Pivot wider: Make Locus values into columns, keeping ID and Age
+meth_wide <- methylation_level %>%
+  pivot_wider(names_from = Locus, values_from = methylationlevel)%>%
+  select(-Age, -Score)
 
 
 ```
+
